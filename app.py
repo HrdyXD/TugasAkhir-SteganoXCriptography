@@ -2,8 +2,8 @@
 
 import streamlit as st
 import streamlit.components.v1 as components
-from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_OAEP
+from Cryptodome.PublicKey import RSA
+from Cryptodome.Cipher import PKCS1_OAEP
 from PIL import Image
 import io, random
 import pandas as pd
