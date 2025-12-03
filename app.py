@@ -1,4 +1,3 @@
-
 import streamlit as st
 import streamlit.components.v1 as components
 from Cryptodome.PublicKey import RSA
@@ -12,6 +11,45 @@ HEADER_BYTES = 11
 HEADER_BITS = HEADER_BYTES * 8
 MAX_SHOW_PIXELS = 300
 
+# ===== DARK MODE GLOBAL =====
+st.markdown("""
+<style>
+
+html, body, .stApp {
+    background-color: #0e1117 !important;
+    color: white !important;
+}
+
+/* TEXT */
+* {
+    color: white !important;
+}
+
+/* INPUTS */
+textarea, input, .stTextInput, .stTextArea, .stFileUploader, .stSelectbox, .stRadio, div[data-baseweb="select"] {
+    background-color: #0e1117 !important;
+    color: white !important;
+}
+
+/* RADIO */
+.stRadio > label {
+    color: white !important;
+}
+
+/* BUTTON */
+.stButton>button {
+    background-color: #1f6feb;
+    color: white !important;
+    border-radius: 8px;
+    border: none;
+    padding: 8px 18px;
+}
+.stButton>button:hover {
+    background-color: #388bfd;
+}
+
+</style>
+""", unsafe_allow_html=True)
 
 # ===== UI PREMIUM: SCROLLABLE TABLE =====
 def scrollable_table(df: pd.DataFrame, height: int = 260):
@@ -20,56 +58,40 @@ def scrollable_table(df: pd.DataFrame, height: int = 260):
         st.info("📭 Tidak ada data ditampilkan")
         return
 
-    table_html = df.to_html(
-        index=False,
-        classes="nice-table",
-        escape=False
-    )
+    table_html = df.to_html(index=False, classes="nice-table", escape=False)
 
     html = f"""
-    <html>
-    <head>
-    <style>
-
-        body {{
-            background-color: #0e1117 !important;
-            color: #ffffff !important;
-        }}
+    <html><head><style>
 
         .table-wrapper {{
             max-height: {height}px;
             overflow-y: auto;
             overflow-x: auto;
-            border-radius: 12px;
+            border-radius: 10px;
             border: 1px solid rgba(255,255,255,0.15);
             background-color: #0e1117;
         }}
 
         table.nice-table {{
-            border-collapse: collapse;
             width: 100%;
-            font-family: 'Segoe UI', sans-serif;
+            border-collapse: collapse;
             font-size: 13px;
-            background-color: #0e1117 !important;
-            color: #ffffff !important;
+            background-color: #0e1117;
+            color: white;
         }}
 
         table.nice-table thead th {{
-            position: sticky;
+            position: sticky; 
             top: 0;
-            background-color: #1a1d23 !important;
-            padding: 10px 8px;
+            background-color: #1a1d23;
+            padding: 8px;
             font-weight: 600;
-            text-align: left;
-            color: #ffffff !important;
-            border-bottom: 1px solid rgba(255,255,255,0.25);
+            border-bottom: 1px solid rgba(255,255,255,0.2);
         }}
 
         table.nice-table td {{
-            padding: 8px 10px;
-            border-bottom: 1px solid rgba(255,255,255,0.07);
-            color: #ffffff !important;
-            background-color: #0e1117 !important;
+            padding: 8px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
         }}
 
         table.nice-table tr:nth-child(even) td {{
@@ -80,121 +102,97 @@ def scrollable_table(df: pd.DataFrame, height: int = 260):
             background-color: #1b1f26 !important;
         }}
 
-    </style>
-    </head>
-
+    </style></head>
     <body>
-        <div class="table-wrapper">
-            {table_html}
-        </div>
-    </body>
-    </html>
+        <div class="table-wrapper">{table_html}</div>
+    </body></html>
     """
 
-    components.html(html, height=height + 50, scrolling=True)
-
+    components.html(html, height=height + 40, scrolling=True)
 
 # ===== RSA HELPERS =====
 def generate_rsa_keypair(bits=2048):
     key = RSA.generate(bits)
     return key.export_key(), key.publickey().export_key()
 
-
 def rsa_encrypt(pub, data_bytes):
-    cipher = PKCS1_OAEP.new(pub)
-    return cipher.encrypt(data_bytes)
+    return PKCS1_OAEP.new(pub).encrypt(data_bytes)
 
+def rsa_decrypt(priv, cipher):
+    return PKCS1_OAEP.new(priv).decrypt(cipher)
 
-def rsa_decrypt(priv, ciphertext):
-    cipher = PKCS1_OAEP.new(priv)
-    return cipher.decrypt(ciphertext)
-
-
-# ===== BIT OPERATIONS =====
+# ===== BIT OPS =====
 def _to_bitstring(b):
     return ''.join(f"{x:08b}" for x in b)
 
-
 def _from_bitstring(s):
-    return bytes(int(s[i:i+8], 2) for i in range(0, len(s), 8))
-
+    return bytes(int(s[i:i+8],2) for i in range(0, len(s), 8))
 
 def int_to_bytes_be(n, length):
-    return n.to_bytes(length, 'big')
-
+    return n.to_bytes(length, "big")
 
 def build_header_bits(random_flag, seed, msg_bits):
     b = bytearray()
-    b.extend(b"ST")  
+    b.extend(b"ST")
     b.append(1 if random_flag else 0)
     b.extend(int_to_bytes_be(seed & 0xffffffff, 4))
     b.extend(int_to_bytes_be(msg_bits & 0xffffffff, 4))
-    return ''.join(format(x, '08b') for x in b)
-
+    return ''.join(format(x, "08b") for x in b)
 
 def parse_header_from_bits(bitstr):
-    if len(bitstr) < HEADER_BITS:
-        return None
+    if len(bitstr) < HEADER_BITS: return None
     bs = bytearray(int(bitstr[i:i+8],2) for i in range(0, HEADER_BITS, 8))
-    if bs[:2] != b"ST":
-        return None
+    if bs[:2] != b"ST": return None
     return {
         "random": bool(bs[2] & 1),
         "seed": int.from_bytes(bs[3:7], "big"),
         "msg_len_bits": int.from_bytes(bs[7:11], "big")
     }
 
-
 # ===== IMAGE OPS =====
 def coords_from_index(idx, width):
     return idx % width, idx // width
-
 
 def embed_ciphertext_into_channel(img, ciphertext, channel, use_random, seed=None):
 
     if img.mode != "RGB":
         img = img.convert("RGB")
 
-    w, h = img.size
-    total = w * h
-    ch = {"R":0, "G":1, "B":2}[channel]
+    w,h = img.size
+    total = w*h
+    ch = {"R":0,"G":1,"B":2}[channel]
 
     msg_bits = _to_bitstring(ciphertext)
     nbits = len(msg_bits)
 
-    # seed
     if use_random:
-        if seed is None:
-            seed = random.getrandbits(32)
+        seed = random.getrandbits(32) if seed is None else int(seed)
     else:
         seed = 0
 
     header_bits = build_header_bits(use_random, seed, nbits)
 
-    if nbits > total - HEADER_BITS:
-        raise ValueError("Pesan terlalu besar untuk disisipkan.")
-
     px = list(img.getdata())
     mod = list(px)
 
-    # tulis header
-    for i, b in enumerate(header_bits):
+    if nbits > total - HEADER_BITS:
+        raise ValueError("Pesan terlalu besar untuk disisipkan.")
+
+    # HEADER LSB
+    for i,b in enumerate(header_bits):
         bit = int(b)
         p = list(mod[i])
         p[ch] = (p[ch] & ~1) | bit
         mod[i] = tuple(p)
 
-    # posisi payload
-    avail = list(range(HEADER_BITS, total))
-
+    available = list(range(HEADER_BITS, total))
     if use_random:
         rng = random.Random(seed)
-        pos = rng.sample(avail, nbits)
+        pos = rng.sample(available, nbits)
     else:
-        pos = avail[:nbits]
+        pos = available[:nbits]
 
-    # embed payload
-    changes = []
+    changes=[]
     for i, position in enumerate(pos):
         bit = int(msg_bits[i])
         p = list(mod[position])
@@ -205,7 +203,7 @@ def embed_ciphertext_into_channel(img, ciphertext, channel, use_random, seed=Non
         changes.append({
             "bit_index": i,
             "pos": position,
-            "coord": coords_from_index(position, w),
+            "coord": coords_from_index(position,w),
             "inserted_bit": bit,
             "old_pixel": px[position],
             "new_pixel": mod[position],
@@ -213,11 +211,10 @@ def embed_ciphertext_into_channel(img, ciphertext, channel, use_random, seed=Non
             "new_lsb": new & 1
         })
 
-    out = Image.new("RGB", (w, h))
+    out = Image.new("RGB",(w,h))
     out.putdata(mod)
-
     buf = io.BytesIO()
-    out.save(buf, "PNG")
+    out.save(buf,"PNG")
     buf.seek(0)
 
     return buf, {
@@ -230,36 +227,30 @@ def embed_ciphertext_into_channel(img, ciphertext, channel, use_random, seed=Non
         "changes": changes
     }
 
-
 def extract_bits_from_channel(img, ch):
-    px = list(img.getdata())
+    px=list(img.getdata())
 
-    header_bits = ''.join(str(px[i][ch] & 1) for i in range(HEADER_BITS))
-    header = parse_header_from_bits(header_bits)
-    if not header:
-        return None, None, None
+    header_bits=''.join(str(px[i][ch] & 1) for i in range(HEADER_BITS))
+    header=parse_header_from_bits(header_bits)
+    if not header: return None,None,None
 
-    nbits = header["msg_len_bits"]
-    total = len(px)
-
-    if nbits > total - HEADER_BITS:
-        return None, None, None
+    nbits=header["msg_len_bits"]
+    total=len(px)
+    if nbits > total - HEADER_BITS: return None,None,None
 
     if header["random"]:
-        rng = random.Random(header["seed"])
-        avail = list(range(HEADER_BITS, total))
-        pos = rng.sample(avail, nbits)
+        rng=random.Random(header["seed"])
+        avail=list(range(HEADER_BITS,total))
+        pos=rng.sample(avail, nbits)
     else:
-        pos = list(range(HEADER_BITS, HEADER_BITS + nbits))
+        pos=list(range(HEADER_BITS, HEADER_BITS+nbits))
 
-    bits = ''.join(str(px[p][ch] & 1) for p in pos)
-
-    return header, bits, pos
-
+    bits=''.join(str(px[p][ch] & 1) for p in pos)
+    return header,bits,pos
 
 # ===== STREAMLIT APP =====
 st.set_page_config(page_title="RSA + LSB Stego", layout="wide")
-st.title("🔐 RSA + LSB Steganografi")
+st.title("🔐 RSA + LSB Steganografi (Dark Mode Premium)")
 
 menu = st.sidebar.selectbox("Menu", ["Generate Key", "Enkripsi + Stego", "Ekstrak + Dekripsi"])
 
@@ -279,7 +270,6 @@ if menu == "Generate Key":
     if "pub" in st.session_state:
         st.download_button("Download Public Key", st.session_state["pub"], "public.pem")
 
-
 # ================= ENKRIPSI =================
 elif menu == "Enkripsi + Stego":
 
@@ -295,9 +285,9 @@ elif menu == "Enkripsi + Stego":
 
         with col2:
             channel = st.radio("Pilih channel LSB:", ["R","G","B"])
-            use_random = st.checkbox("Mode Penempatan Random?")
+            use_random = st.checkbox("Gunakan Mode Random?")
             seed_input = st.text_input("Seed (opsional, integer)", "")
-            show_all = st.checkbox("Tampilkan SEMUA perubahan pixel?")
+            show_all = st.checkbox("Tampilkan semua perubahan pixel?")
 
         ok = st.form_submit_button("Mulai Enkripsi")
 
@@ -306,12 +296,10 @@ elif menu == "Enkripsi + Stego":
             pub = RSA.import_key(pubfile.read())
             ciphertext = rsa_encrypt(pub, msg.encode())
 
-            seed_val = int(seed_input) if (use_random and seed_input.strip() != "") else None
+            seed_val = int(seed_input) if (use_random and seed_input.strip()!="") else None
 
             img = Image.open(cover)
-            stego_buf, summary = embed_ciphertext_into_channel(
-                img, ciphertext, channel, use_random, seed_val
-            )
+            stego_buf, summary = embed_ciphertext_into_channel(img, ciphertext, channel, use_random, seed_val)
             summary["file_name"] = cover.name
 
             st.success("Berhasil disisipkan ke dalam gambar! 🎉")
@@ -329,17 +317,10 @@ elif menu == "Enkripsi + Stego":
                 st.write(f"Seed: **{summary['seed']}**")
             st.write(f"Panjang ciphertext: **{summary['ciphertext_bytes_len']} bytes**")
 
-            # Ciphertext table
+            # Ciphertext table w/ ASCII
             ct_table = []
-
             for i, b in enumerate(ciphertext):
-            
-                # Huruf ASCII yang bisa dicetak
-                if 32 <= b <= 126:
-                    char = chr(b)
-                else:
-                    char = "·"    # simbol placeholder untuk byte non-printable
-            
+                char = chr(b) if (32 <= b <= 126) else "·"
                 ct_table.append({
                     "index": i,
                     "ascii_code": b,
@@ -347,35 +328,37 @@ elif menu == "Enkripsi + Stego":
                     "hex": f"{b:02x}",
                     "bin": f"{b:08b}"
                 })
+
             st.markdown("### 🔸 Ciphertext per-byte")
-            scrollable_table(pd.DataFrame(ct_table), height=230)
+            scrollable_table(pd.DataFrame(ct_table), height=260)
 
             # Pixel changes
             rows = summary["changes"]
             showN = len(rows) if show_all else min(len(rows), HEADER_BITS)
 
-            st.markdown("### 🔸 Perubahan Pixel (LSB)")
             pixel_table = [{
                 "no": i+1,
                 "index": rows[i]["pos"],
                 "coord": rows[i]["coord"],
                 "bit": rows[i]["inserted_bit"],
-                "old": rows[i]["old_pixel"],
-                "new": rows[i]["new_pixel"]
+                "old_pixel": rows[i]["old_pixel"],
+                "new_pixel": rows[i]["new_pixel"]
             } for i in range(showN)]
 
+            st.markdown("### 🔸 Perubahan Pixel (LSB)")
             scrollable_table(pd.DataFrame(pixel_table), height=260)
 
         except Exception as e:
             st.error(f"❌ Error: {e}")
 
-
 # ================= DEKRIPSI =================
 elif menu == "Ekstrak + Dekripsi":
+
     st.header("🕵️ Ekstraksi + Dekripsi RSA")
 
     mode = st.radio("Pilih Mode", ["Normal", "Random"])
 
+    # NORMAL MODE
     if mode == "Normal":
         stego = st.file_uploader("Upload Stego Image", type=["png"])
         priv = st.file_uploader("Upload Private Key", type=["pem"])
@@ -385,14 +368,16 @@ elif menu == "Ekstrak + Dekripsi":
                 img = Image.open(stego)
                 priv_key = RSA.import_key(priv.read())
 
-                found = False
+                found=False
                 for ch_idx, cname in enumerate(["R","G","B"]):
+
                     header, bits, pos = extract_bits_from_channel(img, ch_idx)
                     if not header:
                         continue
+
                     if header["random"]:
-                        st.error(f"Data ada di {cname}, tetapi memakai RANDOM. Gunakan mode RANDOM.")
-                        found = True
+                        st.error(f"Data di channel {cname} menggunakan RANDOM. Gunakan mode RANDOM.")
+                        found=True
                         break
 
                     ciphertext = _from_bitstring(bits)
@@ -401,12 +386,21 @@ elif menu == "Ekstrak + Dekripsi":
                     st.success(f"Data ditemukan di channel {cname}")
                     st.code(dec.decode())
 
-                    ct_table = [{"i": i, "hex": f"{b:02x}", "bin": f"{b:08b}"} 
-                                for i,b in enumerate(ciphertext)]
-                    st.markdown("### Ciphertext")
-                    scrollable_table(pd.DataFrame(ct_table), height=250)
+                    # Ciphertext table
+                    ct_table=[]
+                    for i,b in enumerate(ciphertext):
+                        char = chr(b) if (32 <= b <= 126) else "·"
+                        ct_table.append({
+                            "index": i,
+                            "ascii_code": b,
+                            "char": char,
+                            "hex": f"{b:02x}",
+                            "bin": f"{b:08b}"
+                        })
 
-                    found = True
+                    scrollable_table(pd.DataFrame(ct_table), height=260)
+
+                    found=True
                     break
 
                 if not found:
@@ -417,51 +411,65 @@ elif menu == "Ekstrak + Dekripsi":
 
     # RANDOM MODE
     else:
-        cover = st.file_uploader("Upload Cover", type=["png"])
-        stego = st.file_uploader("Upload Stego", type=["png"])
+        cover = st.file_uploader("Upload Cover Image", type=["png"])
+        stego = st.file_uploader("Upload Stego Image", type=["png"])
         priv = st.file_uploader("Upload Private Key", type=["pem"])
 
         if st.button("Ekstrak Random"):
             try:
                 cimg = Image.open(cover)
                 simg = Image.open(stego)
-
                 priv_key = RSA.import_key(priv.read())
 
-                found = False
-
+                found=False
                 for ch_idx, cname in enumerate(["R","G","B"]):
-                    header, bits, pos = extract_bits_from_channel(simg, ch_idx)
+                    header,bits,pos = extract_bits_from_channel(simg,ch_idx)
                     if not header:
                         continue
 
-                    ciphertext = _from_bitstring(bits)
-                    dec = rsa_decrypt(priv_key, ciphertext)
+                    ciphertext=_from_bitstring(bits)
+                    dec=rsa_decrypt(priv_key,ciphertext)
 
                     st.success(f"Data ditemukan pada channel {cname}")
                     st.write(f"Seed: {header['seed']}")
                     st.code(dec.decode())
 
-                    # show few pixel diffs
-                    px_c = list(cimg.getdata())
-                    px_s = list(simg.getdata())
+                    # Perbedaan pixel
+                    px_c=list(cimg.getdata())
+                    px_s=list(simg.getdata())
 
-                    diffs = []
-                    for i, p in enumerate(pos[:MAX_SHOW_PIXELS]):
+                    diffs=[]
+                    for i,p in enumerate(pos[:MAX_SHOW_PIXELS]):
                         diffs.append({
                             "no": i+1,
                             "index": p,
-                            "cover": px_c[p],
-                            "stego": px_s[p]
+                            "cover_val": px_c[p],
+                            "stego_val": px_s[p]
                         })
 
+                    st.markdown("### 🔸 Perbandingan Pixel (Cover vs Stego)")
                     scrollable_table(pd.DataFrame(diffs), height=260)
 
-                    found = True
+                    # Ciphertext table
+                    ct_table=[]
+                    for i,b in enumerate(ciphertext):
+                        char = chr(b) if (32 <= b <= 126) else "·"
+                        ct_table.append({
+                            "index": i,
+                            "ascii_code": b,
+                            "char": char,
+                            "hex": f"{b:02x}",
+                            "bin": f"{b:08b}"
+                        })
+
+                    st.markdown("### 🔸 Ciphertext per-byte")
+                    scrollable_table(pd.DataFrame(ct_table), height=260)
+
+                    found=True
                     break
 
                 if not found:
-                    st.error("Tidak ada data RANDOM ditemukan")
+                    st.error("Tidak ada data RANDOM ditemukan.")
 
             except Exception as e:
                 st.error(f"❌ Error: {e}")
