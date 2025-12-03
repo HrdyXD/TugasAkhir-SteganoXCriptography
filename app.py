@@ -243,7 +243,7 @@ def extract_bits_from_channel(img: Image.Image, ch: int):
 
 # ===== STREAMLIT APP =====
 st.set_page_config(page_title="RSA + LSB Stego", layout="wide")
-st.title("🔐 RSA + LSB Steganografi (Dark Mode)")
+st.title("🔐 RSA + LSB Steganografi")
 
 menu = st.sidebar.selectbox("Menu", ["Generate Key", "Enkripsi + Stego", "Ekstrak + Dekripsi"])
 
