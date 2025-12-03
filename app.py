@@ -330,8 +330,23 @@ elif menu == "Enkripsi + Stego":
             st.write(f"Panjang ciphertext: **{summary['ciphertext_bytes_len']} bytes**")
 
             # Ciphertext table
-            ct_table = [{"index": i, "hex": f"{b:02x}", "bin": f"{b:08b}"} 
-                        for i, b in enumerate(ciphertext)]
+            ct_table = []
+
+            for i, b in enumerate(ciphertext):
+            
+                # Huruf ASCII yang bisa dicetak
+                if 32 <= b <= 126:
+                    char = chr(b)
+                else:
+                    char = "·"    # simbol placeholder untuk byte non-printable
+            
+                ct_table.append({
+                    "index": i,
+                    "ascii_code": b,
+                    "char": char,
+                    "hex": f"{b:02x}",
+                    "bin": f"{b:08b}"
+                })
             st.markdown("### 🔸 Ciphertext per-byte")
             scrollable_table(pd.DataFrame(ct_table), height=230)
 
