@@ -732,12 +732,11 @@ elif menu == "Pengujian MSE dan PSNR":
 
 
 def evaluate_psnr_quality(psnr_value):
-    """Evaluate PSNR quality"""
     if psnr_value >= 40:
         return "🟢 Excellent"
+    elif psnr_value >= 30:
+        return "🟡 Good"
     elif psnr_value >= 20:
         return "🟠 Fair"
-    elif psnr_value >= 30:
-        return "🔴 Poor"
     else:
-        return "🟡 Good"
+        return "🔴 Poor"
