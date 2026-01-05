@@ -7,6 +7,8 @@ from PIL import Image
 import io
 import random
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
 # ===== KONSTANTA =====
 HEADER_BYTES = 11
@@ -129,6 +131,104 @@ def parse_header_from_bits(bitstr: str):
     }
 
 
+# ===== IMAGE QUALITY METRICS =====
+def calculate_mse(original, modified):
+    """Calculate Mean Squared Error between two images"""
+    original_array = np.array(original, dtype=np.float64)
+    modified_array = np.array(modified, dtype=np.float64)
+    
+    mse = np.mean((original_array - modified_array) ** 2)
+    return mse
+
+
+def calculate_psnr(original, modified):
+    """Calculate Peak Signal-to-Noise Ratio"""
+    mse = calculate_mse(original, modified)
+    
+    if mse == 0:
+        return float('inf')
+    
+    max_pixel = 255.0
+    psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
+    return psnr
+
+
+def calculate_metrics_per_channel(original_img, stego_img):
+    """Calculate MSE and PSNR for each RGB channel"""
+    original_array = np.array(original_img)
+    stego_array = np.array(stego_img)
+    
+    metrics = {}
+    channels = ['R', 'G', 'B']
+    
+    for i, channel in enumerate(channels):
+        original_channel = original_array[:, :, i].astype(np.float64)
+        stego_channel = stego_array[:, :, i].astype(np.float64)
+        
+        mse = np.mean((original_channel - stego_channel) ** 2)
+        
+        if mse == 0:
+            psnr = float('inf')
+        else:
+            psnr = 20 * np.log10(255.0 / np.sqrt(mse))
+        
+        metrics[channel] = {'MSE': mse, 'PSNR': psnr}
+    
+    # Overall metrics
+    overall_mse = calculate_mse(original_img, stego_img)
+    overall_psnr = calculate_psnr(original_img, stego_img)
+    metrics['Overall'] = {'MSE': overall_mse, 'PSNR': overall_psnr}
+    
+    return metrics
+
+
+def plot_metrics(metrics):
+    """Create bar charts for MSE and PSNR metrics"""
+    channels = ['R', 'G', 'B', 'Overall']
+    mse_values = [metrics[ch]['MSE'] for ch in channels]
+    psnr_values = [metrics[ch]['PSNR'] if metrics[ch]['PSNR'] != float('inf') else 100 for ch in channels]
+    
+    # Set dark style for matplotlib
+    plt.style.use('dark_background')
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+    fig.patch.set_facecolor('#0e1117')
+    
+    # MSE Chart
+    colors_mse = ['#ff4b4b', '#4bff4b', '#4b4bff', '#ffaa00']
+    bars1 = ax1.bar(channels, mse_values, color=colors_mse, alpha=0.8)
+    ax1.set_ylabel('MSE Value', fontsize=11)
+    ax1.set_title('Mean Squared Error (MSE) per Channel', fontsize=12, fontweight='bold')
+    ax1.set_facecolor('#0e1117')
+    ax1.grid(axis='y', alpha=0.3, linestyle='--')
+    
+    # Add value labels on bars
+    for bar in bars1:
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2., height,
+                f'{height:.4f}',
+                ha='center', va='bottom', fontsize=9)
+    
+    # PSNR Chart
+    colors_psnr = ['#ff4b4b', '#4bff4b', '#4b4bff', '#ffaa00']
+    bars2 = ax2.bar(channels, psnr_values, color=colors_psnr, alpha=0.8)
+    ax2.set_ylabel('PSNR (dB)', fontsize=11)
+    ax2.set_title('Peak Signal-to-Noise Ratio (PSNR) per Channel', fontsize=12, fontweight='bold')
+    ax2.set_facecolor('#0e1117')
+    ax2.grid(axis='y', alpha=0.3, linestyle='--')
+    
+    # Add value labels on bars
+    for bar, val in zip(bars2, psnr_values):
+        height = bar.get_height()
+        label = '∞' if metrics[channels[bars2.patches.index(bar)]]['PSNR'] == float('inf') else f'{height:.2f}'
+        ax2.text(bar.get_x() + bar.get_width()/2., height,
+                label,
+                ha='center', va='bottom', fontsize=9)
+    
+    plt.tight_layout()
+    return fig
+
+
 # ===== IMAGE HELPERS =====
 def coords_from_index(idx: int, width: int):
     return idx % width, idx // width
@@ -205,6 +305,7 @@ def embed_ciphertext_into_channel(img: Image.Image, ciphertext: bytes, channel: 
 
     return (
         buf,
+        out,  # Return the PIL Image object for metrics calculation
         {
             "file_name": None,
             "channel": channel,
@@ -289,13 +390,65 @@ elif menu == "Enkripsi + Stego":
 
                 seed_val = int(seed_input) if (use_random and seed_input.strip() != "") else None
 
-                img = Image.open(cover)
-                stego_buf, summary = embed_ciphertext_into_channel(img, ciphertext, channel, use_random, seed_val)
+                original_img = Image.open(cover).convert("RGB")
+                stego_buf, stego_img, summary = embed_ciphertext_into_channel(original_img, ciphertext, channel, use_random, seed_val)
                 summary["file_name"] = getattr(cover, "name", "cover")
 
                 st.success("Berhasil disisipkan ke dalam gambar! 🎉")
-                st.image(stego_buf, width=350)
+                
+                # Display images side by side
+                col_img1, col_img2 = st.columns(2)
+                with col_img1:
+                    st.markdown("**Cover Image (Original)**")
+                    st.image(original_img, width=350)
+                with col_img2:
+                    st.markdown("**Stego Image (Modified)**")
+                    st.image(stego_buf, width=350)
+                
                 st.download_button("Download Stego Image", stego_buf.getvalue(), f"{summary['file_name']}_stego.png", mime="image/png")
+
+                # Calculate MSE & PSNR metrics
+                metrics = calculate_metrics_per_channel(original_img, stego_img)
+                
+                # Display metrics
+                st.subheader("📊 Kualitas Gambar: MSE & PSNR")
+                
+                # Create metrics table
+                metrics_data = []
+                for channel_name in ['R', 'G', 'B', 'Overall']:
+                    mse_val = metrics[channel_name]['MSE']
+                    psnr_val = metrics[channel_name]['PSNR']
+                    psnr_display = "∞ (Identik)" if psnr_val == float('inf') else f"{psnr_val:.2f} dB"
+                    
+                    metrics_data.append({
+                        'Channel': channel_name,
+                        'MSE': f"{mse_val:.6f}",
+                        'PSNR': psnr_display
+                    })
+                
+                metrics_df = pd.DataFrame(metrics_data)
+                st.dataframe(metrics_df, use_container_width=True)
+                
+                # Plot metrics charts
+                st.markdown("### 📈 Grafik MSE & PSNR")
+                fig = plot_metrics(metrics)
+                st.pyplot(fig)
+                
+                # Interpretation guide
+                with st.expander("ℹ️ Interpretasi Nilai MSE & PSNR"):
+                    st.markdown("""
+                    **MSE (Mean Squared Error):**
+                    - Nilai **lebih kecil = lebih baik** (gambar lebih mirip dengan aslinya)
+                    - MSE = 0 berarti kedua gambar identik
+                    - Nilai tipikal untuk LSB stego: 0.001 - 0.1
+                    
+                    **PSNR (Peak Signal-to-Noise Ratio):**
+                    - Nilai **lebih besar = lebih baik** (kualitas gambar lebih tinggi)
+                    - PSNR > 40 dB: kualitas excellent (perubahan tidak terlihat mata)
+                    - PSNR 30-40 dB: kualitas good
+                    - PSNR 20-30 dB: kualitas acceptable
+                    - PSNR < 20 dB: kualitas poor
+                    """)
 
                 # Ringkasan
                 st.subheader("📌 Ringkasan Penyisipan")
