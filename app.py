@@ -7,6 +7,8 @@ import io, random
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import matplotlib.pyplot as plt
 
 # ===== KONSTANTA =====
 HEADER_BYTES = 11
@@ -14,7 +16,7 @@ HEADER_BITS = HEADER_BYTES * 8
 MAX_SHOW_PIXELS = 300
 
 
-# ===== UI PREMIUM: SCROLLABLE TABLE =====
+# ===== SCROLLABLE TABLE =====
 def scrollable_table(df: pd.DataFrame, height: int = 260):
 
     if df is None or df.empty:
@@ -286,6 +288,18 @@ def calculate_psnr(mse_value, max_pixel=255.0):
     return 10 * np.log10((max_pixel ** 2) / mse_value)
 
 
+def evaluate_psnr_quality(psnr_value):
+    """Evaluate PSNR quality"""
+    if psnr_value >= 40:
+        return "🟢 Excellent"
+    elif psnr_value >= 30:
+        return "🟡 Good"
+    elif psnr_value >= 20:
+        return "🟠 Fair"
+    else:
+        return "🔴 Poor"
+
+
 def analyze_image_quality(cover_img, stego_img):
     """Comprehensive image quality analysis"""
     
@@ -320,7 +334,7 @@ def analyze_image_quality(cover_img, stego_img):
 
 # ===== STREAMLIT APP =====
 st.set_page_config(page_title="RSA + LSB Stego", layout="wide")
-st.title("🔐 RSA + LSB Steganografi (Premium UI)")
+st.title("🔐 RSA + LSB Steganografi")
 
 menu = st.sidebar.selectbox("Menu", [
     "Generate Key", 
@@ -551,11 +565,11 @@ elif menu == "Pengujian MSE dan PSNR":
                     
                     with img_col1:
                         st.markdown("**Cover Image**")
-                        st.image(cover_img, use_container_width=True)
+                        st.image(cover_img, use_column_width=True)
                     
                     with img_col2:
                         st.markdown("**Stego Image**")
-                        st.image(stego_img, use_container_width=True)
+                        st.image(stego_img, use_column_width=True)
                     
                     # Display basic info
                     st.markdown("### 📏 Informasi Gambar")
@@ -721,6 +735,9 @@ def evaluate_psnr_quality(psnr_value):
     """Evaluate PSNR quality"""
     if psnr_value >= 40:
         return "🟢 Excellent"
+    elif psnr_value >= 20:
+        return "🟠 Fair"
     elif psnr_value >= 30:
+        return "🔴 Poor"
+    else:
         return "🟡 Good"
-    elif psnr
