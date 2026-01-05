@@ -1,4 +1,70 @@
-# app.py
+st.write(f"• MSE Channel B: **{metrics['B']['MSE']:.6f}**")
+                
+                # Detailed metrics section after summary
+                st.markdown("---")
+                st.subheader("📊 Analisis Kualitas Gambar: MSE & PSNR")
+                
+                # Create metrics comparison table
+                st.markdown("#### 📋 Tabel Perbandingan Metrik per Channel")
+                metrics_data = []
+                for channel_name in ['R', 'G', 'B', 'Overall']:
+                    mse_val = metrics[channel_name]['MSE']
+                    psnr_val = metrics[channel_name]['PSNR']
+                    psnr_display = "∞ (Identik)" if psnr_val == float('inf') else f"{psnr_val:.2f} dB"
+                    
+                    # Add quality assessment
+                    if psnr_val == float('inf'):
+                        quality = "Perfect"
+                    elif psnr_val > 40:
+                        quality = "Excellent"
+                    elif psnr_val > 30:
+                        quality = "Good"
+                    elif psnr_val > 20:
+                        quality = "Acceptable"
+                    else:
+                        quality = "Poor"
+                    
+                    metrics_data.append({
+                        'Channel': channel_name,
+                        'MSE': f"{mse_val:.6f}",
+                        'PSNR': psnr_display,
+                        'Quality': quality
+                    })
+                
+                metrics_df = pd.DataFrame(metrics_data)
+                st.dataframe(metrics_df, use_container_width=True, hide_index=True)
+                
+                # Plot metrics charts
+                st.markdown("#### 📈 Grafik Perbandingan MSE & PSNR")
+                fig = plot_metrics(metrics)
+                st.pyplot(fig)
+                
+                # Interpretation guide
+                with st.expander("ℹ️ Cara Membaca Metrik MSE & PSNR"):
+                    st.markdown("""
+                    **MSE (Mean Squared Error):**
+                    - Mengukur rata-rata kuadrat perbedaan antara pixel cover dan stego
+                    - Nilai **lebih kecil = lebih baik** (gambar lebih mirip dengan aslinya)
+                    - MSE = 0 berarti kedua gambar identik sempurna
+                    - Nilai tipikal untuk LSB steganografi: 0.001 - 0.1
+                    - Formula: MSE = (1/n) Σ(original - stego)²
+                    
+                    **PSNR (Peak Signal-to-Noise Ratio):**
+                    - Mengukur rasio antara sinyal maksimum dengan noise (dalam dB)
+                    - Nilai **lebih besar = lebih baik** (kualitas gambar lebih tinggi)
+                    - **PSNR > 40 dB**: Excellent - perubahan tidak terlihat oleh mata manusia
+                    - **PSNR 30-40 dB**: Good - perubahan sangat minimal
+                    - **PSNR 20-30 dB**: Acceptable - perubahan mungkin terlihat sedikit
+                    - **PSNR < 20 dB**: Poor - perubahan terlihat jelas
+                    - Formula: PSNR = 20 × log₁₀(MAX / √MSE)
+                    
+                    **Interpretasi untuk Steganografi:**
+                    - Channel yang digunakan untuk embedding akan memiliki MSE lebih tinggi (PSNR lebih rendah)
+                    - Channel yang tidak digunakan seharusnya identik (MSE = 0, PSNR = ∞)
+                    - Untuk LSB yang baik, PSNR overall seharusnya > 40 dB
+                    """)
+                
+                st.markdown("---")# app.py
 import streamlit as st
 import streamlit.components.v1 as components
 from Cryptodome.PublicKey import RSA
@@ -409,56 +475,29 @@ elif menu == "Enkripsi + Stego":
 
                 # Calculate MSE & PSNR metrics
                 metrics = calculate_metrics_per_channel(original_img, stego_img)
-                
-                # Display metrics
-                st.subheader("📊 Kualitas Gambar: MSE & PSNR")
-                
-                # Create metrics table
-                metrics_data = []
-                for channel_name in ['R', 'G', 'B', 'Overall']:
-                    mse_val = metrics[channel_name]['MSE']
-                    psnr_val = metrics[channel_name]['PSNR']
-                    psnr_display = "∞ (Identik)" if psnr_val == float('inf') else f"{psnr_val:.2f} dB"
-                    
-                    metrics_data.append({
-                        'Channel': channel_name,
-                        'MSE': f"{mse_val:.6f}",
-                        'PSNR': psnr_display
-                    })
-                
-                metrics_df = pd.DataFrame(metrics_data)
-                st.dataframe(metrics_df, use_container_width=True)
-                
-                # Plot metrics charts
-                st.markdown("### 📈 Grafik MSE & PSNR")
-                fig = plot_metrics(metrics)
-                st.pyplot(fig)
-                
-                # Interpretation guide
-                with st.expander("ℹ️ Interpretasi Nilai MSE & PSNR"):
-                    st.markdown("""
-                    **MSE (Mean Squared Error):**
-                    - Nilai **lebih kecil = lebih baik** (gambar lebih mirip dengan aslinya)
-                    - MSE = 0 berarti kedua gambar identik
-                    - Nilai tipikal untuk LSB stego: 0.001 - 0.1
-                    
-                    **PSNR (Peak Signal-to-Noise Ratio):**
-                    - Nilai **lebih besar = lebih baik** (kualitas gambar lebih tinggi)
-                    - PSNR > 40 dB: kualitas excellent (perubahan tidak terlihat mata)
-                    - PSNR 30-40 dB: kualitas good
-                    - PSNR 20-30 dB: kualitas acceptable
-                    - PSNR < 20 dB: kualitas poor
-                    """)
 
                 # Ringkasan
                 st.subheader("📌 Ringkasan Penyisipan")
-                st.write(f"File input : **{summary['file_name']}**")
-                st.write(f"Channel    : **{summary['channel']}**")
-                st.write(f"Mode RANDOM : **{'YA' if summary['use_random'] else 'TIDAK'}**")
-                if summary["use_random"]:
-                    st.write(f"Seed (32-bit): **{summary['seed']}**")
-                st.write(f"Jumlah bit pesan : **{summary['nbits']}**")
-                st.write(f"Ciphertext byte length : **{summary['ciphertext_bytes_len']}**")
+                col_sum1, col_sum2 = st.columns([1, 1])
+                
+                with col_sum1:
+                    st.markdown("**Informasi Penyisipan:**")
+                    st.write(f"• File input: **{summary['file_name']}**")
+                    st.write(f"• Channel: **{summary['channel']}**")
+                    st.write(f"• Mode RANDOM: **{'YA' if summary['use_random'] else 'TIDAK'}**")
+                    if summary["use_random"]:
+                        st.write(f"• Seed (32-bit): **{summary['seed']}**")
+                    st.write(f"• Jumlah bit pesan: **{summary['nbits']}**")
+                    st.write(f"• Ciphertext byte length: **{summary['ciphertext_bytes_len']}**")
+                
+                with col_sum2:
+                    st.markdown("**Metrik Kualitas Gambar:**")
+                    st.write(f"• MSE Overall: **{metrics['Overall']['MSE']:.6f}**")
+                    psnr_overall = "∞ (Identik)" if metrics['Overall']['PSNR'] == float('inf') else f"{metrics['Overall']['PSNR']:.2f} dB"
+                    st.write(f"• PSNR Overall: **{psnr_overall}**")
+                    st.write(f"• MSE Channel R: **{metrics['R']['MSE']:.6f}**")
+                    st.write(f"• MSE Channel G: **{metrics['G']['MSE']:.6f}**")
+                    st.write(f"• MSE Channel B: **{metrics['B']['MSE']:.6f}**")
 
                 # Ciphertext per-byte (index, ascii_code, char, hex, bin)
                 ct_table = []
