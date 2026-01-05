@@ -1,77 +1,9 @@
-st.write(f"• MSE Channel B: **{metrics['B']['MSE']:.6f}**")
-                
-                # Detailed metrics section after summary
-                st.markdown("---")
-                st.subheader("📊 Analisis Kualitas Gambar: MSE & PSNR")
-                
-                # Create metrics comparison table
-                st.markdown("#### 📋 Tabel Perbandingan Metrik per Channel")
-                metrics_data = []
-                for channel_name in ['R', 'G', 'B', 'Overall']:
-                    mse_val = metrics[channel_name]['MSE']
-                    psnr_val = metrics[channel_name]['PSNR']
-                    psnr_display = "∞ (Identik)" if psnr_val == float('inf') else f"{psnr_val:.2f} dB"
-                    
-                    # Add quality assessment
-                    if psnr_val == float('inf'):
-                        quality = "Perfect"
-                    elif psnr_val > 40:
-                        quality = "Excellent"
-                    elif psnr_val > 30:
-                        quality = "Good"
-                    elif psnr_val > 20:
-                        quality = "Acceptable"
-                    else:
-                        quality = "Poor"
-                    
-                    metrics_data.append({
-                        'Channel': channel_name,
-                        'MSE': f"{mse_val:.6f}",
-                        'PSNR': psnr_display,
-                        'Quality': quality
-                    })
-                
-                metrics_df = pd.DataFrame(metrics_data)
-                st.dataframe(metrics_df, use_container_width=True, hide_index=True)
-                
-                # Plot metrics charts
-                st.markdown("#### 📈 Grafik Perbandingan MSE & PSNR")
-                fig = plot_metrics(metrics)
-                st.pyplot(fig)
-                
-                # Interpretation guide
-                with st.expander("ℹ️ Cara Membaca Metrik MSE & PSNR"):
-                    st.markdown("""
-                    **MSE (Mean Squared Error):**
-                    - Mengukur rata-rata kuadrat perbedaan antara pixel cover dan stego
-                    - Nilai **lebih kecil = lebih baik** (gambar lebih mirip dengan aslinya)
-                    - MSE = 0 berarti kedua gambar identik sempurna
-                    - Nilai tipikal untuk LSB steganografi: 0.001 - 0.1
-                    - Formula: MSE = (1/n) Σ(original - stego)²
-                    
-                    **PSNR (Peak Signal-to-Noise Ratio):**
-                    - Mengukur rasio antara sinyal maksimum dengan noise (dalam dB)
-                    - Nilai **lebih besar = lebih baik** (kualitas gambar lebih tinggi)
-                    - **PSNR > 40 dB**: Excellent - perubahan tidak terlihat oleh mata manusia
-                    - **PSNR 30-40 dB**: Good - perubahan sangat minimal
-                    - **PSNR 20-30 dB**: Acceptable - perubahan mungkin terlihat sedikit
-                    - **PSNR < 20 dB**: Poor - perubahan terlihat jelas
-                    - Formula: PSNR = 20 × log₁₀(MAX / √MSE)
-                    
-                    **Interpretasi untuk Steganografi:**
-                    - Channel yang digunakan untuk embedding akan memiliki MSE lebih tinggi (PSNR lebih rendah)
-                    - Channel yang tidak digunakan seharusnya identik (MSE = 0, PSNR = ∞)
-                    - Untuk LSB yang baik, PSNR overall seharusnya > 40 dB
-                    """)
-                
-                st.markdown("---")# app.py
 import streamlit as st
 import streamlit.components.v1 as components
-from Cryptodome.PublicKey import RSA
-from Cryptodome.Cipher import PKCS1_OAEP
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
 from PIL import Image
-import io
-import random
+import io, random
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -81,268 +13,189 @@ HEADER_BYTES = 11
 HEADER_BITS = HEADER_BYTES * 8
 MAX_SHOW_PIXELS = 300
 
-# ===== DARK MODE GLOBAL =====
-st.markdown(
-    """
-<style>
-html, body, .stApp { background-color: #0e1117 !important; color: white !important; }
-* { color: white !important; }
-.stButton>button { background-color: #1f6feb; color: white !important; border-radius: 8px; }
-.stButton>button:hover { background-color: #388bfd; }
-</style>
-""",
-    unsafe_allow_html=True,
-)
 
 # ===== UI PREMIUM: SCROLLABLE TABLE =====
 def scrollable_table(df: pd.DataFrame, height: int = 260):
-    """Render pandas DataFrame as an HTML table inside a dark scrollable container."""
+
     if df is None or df.empty:
-        st.info("📭 Tidak ada data untuk ditampilkan")
+        st.info("📭 Tidak ada data ditampilkan")
         return
 
-    table_html = df.to_html(index=False, classes="nice-table", escape=False)
+    table_html = df.to_html(
+        index=False,
+        classes="nice-table",
+        escape=False
+    )
 
     html = f"""
-    <html><head><style>
+    <html>
+    <head>
+    <style>
+
+        body {{
+            background-color: #0e1117 !important;
+            color: #ffffff !important;
+        }}
+
         .table-wrapper {{
             max-height: {height}px;
             overflow-y: auto;
             overflow-x: auto;
-            border-radius: 10px;
-            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.15);
             background-color: #0e1117;
-            padding: 6px;
         }}
+
         table.nice-table {{
-            width: 100%;
             border-collapse: collapse;
+            width: 100%;
+            font-family: 'Segoe UI', sans-serif;
             font-size: 13px;
-            background-color: #0e1117;
-            color: white;
+            background-color: #0e1117 !important;
+            color: #ffffff !important;
         }}
+
         table.nice-table thead th {{
             position: sticky;
             top: 0;
-            background-color: #1a1d23;
-            padding: 8px;
+            background-color: #1a1d23 !important;
+            padding: 10px 8px;
             font-weight: 600;
-            border-bottom: 1px solid rgba(255,255,255,0.18);
+            text-align: left;
+            color: #ffffff !important;
+            border-bottom: 1px solid rgba(255,255,255,0.25);
         }}
+
         table.nice-table td {{
-            padding: 8px;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            padding: 8px 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            color: #ffffff !important;
+            background-color: #0e1117 !important;
         }}
+
         table.nice-table tr:nth-child(even) td {{
             background-color: #11151c !important;
         }}
+
         table.nice-table tr:hover td {{
             background-color: #1b1f26 !important;
         }}
-    </style></head>
+
+    </style>
+    </head>
+
     <body>
-        <div class="table-wrapper">{table_html}</div>
-    </body></html>
+        <div class="table-wrapper">
+            {table_html}
+        </div>
+    </body>
+    </html>
     """
 
-    components.html(html, height=height + 40, scrolling=True)
+    components.html(html, height=height + 50, scrolling=True)
 
 
 # ===== RSA HELPERS =====
-def generate_rsa_keypair(bits: int = 2048):
+def generate_rsa_keypair(bits=2048):
     key = RSA.generate(bits)
     return key.export_key(), key.publickey().export_key()
 
 
-def rsa_encrypt(pub, data_bytes: bytes) -> bytes:
-    return PKCS1_OAEP.new(pub).encrypt(data_bytes)
+def rsa_encrypt(pub, data_bytes):
+    cipher = PKCS1_OAEP.new(pub)
+    return cipher.encrypt(data_bytes)
 
 
-def rsa_decrypt(priv, ciphertext: bytes) -> bytes:
-    return PKCS1_OAEP.new(priv).decrypt(ciphertext)
+def rsa_decrypt(priv, ciphertext):
+    cipher = PKCS1_OAEP.new(priv)
+    return cipher.decrypt(ciphertext)
 
 
 # ===== BIT OPERATIONS =====
-def _to_bitstring(b: bytes) -> str:
-    return "".join(f"{x:08b}" for x in b)
+def _to_bitstring(b):
+    return ''.join(f"{x:08b}" for x in b)
 
 
-def _from_bitstring(s: str) -> bytes:
-    return bytes(int(s[i : i + 8], 2) for i in range(0, len(s), 8))
+def _from_bitstring(s):
+    return bytes(int(s[i:i+8], 2) for i in range(0, len(s), 8))
 
 
-def int_to_bytes_be(n: int, length: int) -> bytes:
-    return n.to_bytes(length, "big")
+def int_to_bytes_be(n, length):
+    return n.to_bytes(length, 'big')
 
 
-def build_header_bits(random_flag: bool, seed: int, msg_bits: int) -> str:
+def build_header_bits(random_flag, seed, msg_bits):
     b = bytearray()
-    b.extend(b"ST")  # magic
+    b.extend(b"ST")  
     b.append(1 if random_flag else 0)
-    b.extend(int_to_bytes_be(seed & 0xFFFFFFFF, 4))
-    b.extend(int_to_bytes_be(msg_bits & 0xFFFFFFFF, 4))
-    return "".join(format(x, "08b") for x in b)
+    b.extend(int_to_bytes_be(seed & 0xffffffff, 4))
+    b.extend(int_to_bytes_be(msg_bits & 0xffffffff, 4))
+    return ''.join(format(x, '08b') for x in b)
 
 
-def parse_header_from_bits(bitstr: str):
+def parse_header_from_bits(bitstr):
     if len(bitstr) < HEADER_BITS:
         return None
-    bs = bytearray(int(bitstr[i : i + 8], 2) for i in range(0, HEADER_BITS, 8))
+    bs = bytearray(int(bitstr[i:i+8],2) for i in range(0, HEADER_BITS, 8))
     if bs[:2] != b"ST":
         return None
     return {
         "random": bool(bs[2] & 1),
         "seed": int.from_bytes(bs[3:7], "big"),
-        "msg_len_bits": int.from_bytes(bs[7:11], "big"),
+        "msg_len_bits": int.from_bytes(bs[7:11], "big")
     }
 
 
-# ===== IMAGE QUALITY METRICS =====
-def calculate_mse(original, modified):
-    """Calculate Mean Squared Error between two images"""
-    original_array = np.array(original, dtype=np.float64)
-    modified_array = np.array(modified, dtype=np.float64)
-    
-    mse = np.mean((original_array - modified_array) ** 2)
-    return mse
-
-
-def calculate_psnr(original, modified):
-    """Calculate Peak Signal-to-Noise Ratio"""
-    mse = calculate_mse(original, modified)
-    
-    if mse == 0:
-        return float('inf')
-    
-    max_pixel = 255.0
-    psnr = 20 * np.log10(max_pixel / np.sqrt(mse))
-    return psnr
-
-
-def calculate_metrics_per_channel(original_img, stego_img):
-    """Calculate MSE and PSNR for each RGB channel"""
-    original_array = np.array(original_img)
-    stego_array = np.array(stego_img)
-    
-    metrics = {}
-    channels = ['R', 'G', 'B']
-    
-    for i, channel in enumerate(channels):
-        original_channel = original_array[:, :, i].astype(np.float64)
-        stego_channel = stego_array[:, :, i].astype(np.float64)
-        
-        mse = np.mean((original_channel - stego_channel) ** 2)
-        
-        if mse == 0:
-            psnr = float('inf')
-        else:
-            psnr = 20 * np.log10(255.0 / np.sqrt(mse))
-        
-        metrics[channel] = {'MSE': mse, 'PSNR': psnr}
-    
-    # Overall metrics
-    overall_mse = calculate_mse(original_img, stego_img)
-    overall_psnr = calculate_psnr(original_img, stego_img)
-    metrics['Overall'] = {'MSE': overall_mse, 'PSNR': overall_psnr}
-    
-    return metrics
-
-
-def plot_metrics(metrics):
-    """Create bar charts for MSE and PSNR metrics"""
-    channels = ['R', 'G', 'B', 'Overall']
-    mse_values = [metrics[ch]['MSE'] for ch in channels]
-    psnr_values = [metrics[ch]['PSNR'] if metrics[ch]['PSNR'] != float('inf') else 100 for ch in channels]
-    
-    # Set dark style for matplotlib
-    plt.style.use('dark_background')
-    
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-    fig.patch.set_facecolor('#0e1117')
-    
-    # MSE Chart
-    colors_mse = ['#ff4b4b', '#4bff4b', '#4b4bff', '#ffaa00']
-    bars1 = ax1.bar(channels, mse_values, color=colors_mse, alpha=0.8)
-    ax1.set_ylabel('MSE Value', fontsize=11)
-    ax1.set_title('Mean Squared Error (MSE) per Channel', fontsize=12, fontweight='bold')
-    ax1.set_facecolor('#0e1117')
-    ax1.grid(axis='y', alpha=0.3, linestyle='--')
-    
-    # Add value labels on bars
-    for bar in bars1:
-        height = bar.get_height()
-        ax1.text(bar.get_x() + bar.get_width()/2., height,
-                f'{height:.4f}',
-                ha='center', va='bottom', fontsize=9)
-    
-    # PSNR Chart
-    colors_psnr = ['#ff4b4b', '#4bff4b', '#4b4bff', '#ffaa00']
-    bars2 = ax2.bar(channels, psnr_values, color=colors_psnr, alpha=0.8)
-    ax2.set_ylabel('PSNR (dB)', fontsize=11)
-    ax2.set_title('Peak Signal-to-Noise Ratio (PSNR) per Channel', fontsize=12, fontweight='bold')
-    ax2.set_facecolor('#0e1117')
-    ax2.grid(axis='y', alpha=0.3, linestyle='--')
-    
-    # Add value labels on bars
-    for bar, val in zip(bars2, psnr_values):
-        height = bar.get_height()
-        label = '∞' if metrics[channels[bars2.patches.index(bar)]]['PSNR'] == float('inf') else f'{height:.2f}'
-        ax2.text(bar.get_x() + bar.get_width()/2., height,
-                label,
-                ha='center', va='bottom', fontsize=9)
-    
-    plt.tight_layout()
-    return fig
-
-
-# ===== IMAGE HELPERS =====
-def coords_from_index(idx: int, width: int):
+# ===== IMAGE OPS =====
+def coords_from_index(idx, width):
     return idx % width, idx // width
 
 
-def embed_ciphertext_into_channel(img: Image.Image, ciphertext: bytes, channel: str, use_random: bool, seed=None):
-    """Embed ciphertext into chosen RGB channel LSB with header and optional random placement."""
+def embed_ciphertext_into_channel(img, ciphertext, channel, use_random, seed=None):
+
     if img.mode != "RGB":
         img = img.convert("RGB")
 
     w, h = img.size
     total = w * h
-    ch = {"R": 0, "G": 1, "B": 2}[channel]
+    ch = {"R":0, "G":1, "B":2}[channel]
 
     msg_bits = _to_bitstring(ciphertext)
     nbits = len(msg_bits)
 
-    # determine seed
+    # seed
     if use_random:
-        seed = random.getrandbits(32) if seed is None else int(seed)
+        if seed is None:
+            seed = random.getrandbits(32)
     else:
         seed = 0
 
     header_bits = build_header_bits(use_random, seed, nbits)
 
     if nbits > total - HEADER_BITS:
-        raise ValueError("Pesan terlalu besar untuk disisipkan pada gambar ini.")
+        raise ValueError("Pesan terlalu besar untuk disisipkan.")
 
     px = list(img.getdata())
     mod = list(px)
 
-    # write header bits sequentially at pixel indices 0..HEADER_BITS-1 (in chosen channel)
+    # tulis header
     for i, b in enumerate(header_bits):
         bit = int(b)
         p = list(mod[i])
         p[ch] = (p[ch] & ~1) | bit
         mod[i] = tuple(p)
 
-    # select positions for payload
-    available = list(range(HEADER_BITS, total))
+    # posisi payload
+    avail = list(range(HEADER_BITS, total))
+
     if use_random:
         rng = random.Random(seed)
-        pos = rng.sample(available, nbits)
+        pos = rng.sample(avail, nbits)
     else:
-        pos = available[:nbits]
+        pos = avail[:nbits]
 
+    # embed payload
     changes = []
-    # write payload bits
     for i, position in enumerate(pos):
         bit = int(msg_bits[i])
         p = list(mod[position])
@@ -350,50 +203,46 @@ def embed_ciphertext_into_channel(img: Image.Image, ciphertext: bytes, channel: 
         new = (old & ~1) | bit
         p[ch] = new
         mod[position] = tuple(p)
-        changes.append(
-            {
-                "bit_index": i,
-                "pos": position,
-                "coord": coords_from_index(position, w),
-                "inserted_bit": bit,
-                "old_pixel": px[position],
-                "new_pixel": mod[position],
-                "old_lsb": old & 1,
-                "new_lsb": new & 1,
-            }
-        )
+        changes.append({
+            "bit_index": i,
+            "pos": position,
+            "coord": coords_from_index(position, w),
+            "inserted_bit": bit,
+            "old_pixel": px[position],
+            "new_pixel": mod[position],
+            "old_lsb": old & 1,
+            "new_lsb": new & 1
+        })
 
     out = Image.new("RGB", (w, h))
     out.putdata(mod)
+
     buf = io.BytesIO()
     out.save(buf, "PNG")
     buf.seek(0)
 
-    return (
-        buf,
-        out,  # Return the PIL Image object for metrics calculation
-        {
-            "file_name": None,
-            "channel": channel,
-            "use_random": use_random,
-            "seed": seed,
-            "nbits": nbits,
-            "ciphertext_bytes_len": len(ciphertext),
-            "changes": changes,
-        },
-    )
+    return buf, {
+        "file_name": None,
+        "channel": channel,
+        "use_random": use_random,
+        "seed": seed,
+        "nbits": nbits,
+        "ciphertext_bytes_len": len(ciphertext),
+        "changes": changes
+    }
 
 
-def extract_bits_from_channel(img: Image.Image, ch: int):
+def extract_bits_from_channel(img, ch):
     px = list(img.getdata())
 
-    header_bits = "".join(str(px[i][ch] & 1) for i in range(HEADER_BITS))
+    header_bits = ''.join(str(px[i][ch] & 1) for i in range(HEADER_BITS))
     header = parse_header_from_bits(header_bits)
     if not header:
         return None, None, None
 
     nbits = header["msg_len_bits"]
     total = len(px)
+
     if nbits > total - HEADER_BITS:
         return None, None, None
 
@@ -404,17 +253,83 @@ def extract_bits_from_channel(img: Image.Image, ch: int):
     else:
         pos = list(range(HEADER_BITS, HEADER_BITS + nbits))
 
-    bits = "".join(str(px[p][ch] & 1) for p in pos)
+    bits = ''.join(str(px[p][ch] & 1) for p in pos)
+
     return header, bits, pos
+
+
+# ===== MSE & PSNR CALCULATION =====
+def calculate_mse(img1, img2):
+    """Calculate Mean Squared Error between two images"""
+    arr1 = np.array(img1, dtype=np.float64)
+    arr2 = np.array(img2, dtype=np.float64)
+    
+    mse = np.mean((arr1 - arr2) ** 2)
+    
+    # Per channel MSE
+    mse_r = np.mean((arr1[:,:,0] - arr2[:,:,0]) ** 2)
+    mse_g = np.mean((arr1[:,:,1] - arr2[:,:,1]) ** 2)
+    mse_b = np.mean((arr1[:,:,2] - arr2[:,:,2]) ** 2)
+    
+    return {
+        "overall": mse,
+        "R": mse_r,
+        "G": mse_g,
+        "B": mse_b
+    }
+
+
+def calculate_psnr(mse_value, max_pixel=255.0):
+    """Calculate PSNR from MSE"""
+    if mse_value == 0:
+        return float('inf')
+    return 10 * np.log10((max_pixel ** 2) / mse_value)
+
+
+def analyze_image_quality(cover_img, stego_img):
+    """Comprehensive image quality analysis"""
+    
+    # Convert to RGB if needed
+    if cover_img.mode != "RGB":
+        cover_img = cover_img.convert("RGB")
+    if stego_img.mode != "RGB":
+        stego_img = stego_img.convert("RGB")
+    
+    # Check dimensions
+    if cover_img.size != stego_img.size:
+        raise ValueError("Gambar cover dan stego harus memiliki dimensi yang sama!")
+    
+    # Calculate MSE
+    mse_results = calculate_mse(cover_img, stego_img)
+    
+    # Calculate PSNR
+    psnr_results = {
+        "overall": calculate_psnr(mse_results["overall"]),
+        "R": calculate_psnr(mse_results["R"]),
+        "G": calculate_psnr(mse_results["G"]),
+        "B": calculate_psnr(mse_results["B"])
+    }
+    
+    return {
+        "mse": mse_results,
+        "psnr": psnr_results,
+        "dimensions": cover_img.size,
+        "total_pixels": cover_img.size[0] * cover_img.size[1]
+    }
 
 
 # ===== STREAMLIT APP =====
 st.set_page_config(page_title="RSA + LSB Stego", layout="wide")
-st.title("🔐 RSA + LSB Steganografi")
+st.title("🔐 RSA + LSB Steganografi (Premium UI)")
 
-menu = st.sidebar.selectbox("Menu", ["Generate Key", "Enkripsi + Stego", "Ekstrak + Dekripsi"])
+menu = st.sidebar.selectbox("Menu", [
+    "Generate Key", 
+    "Enkripsi + Stego", 
+    "Ekstrak + Dekripsi",
+    "Pengujian MSE dan PSNR"
+])
 
-# ------------------- Generate Key -------------------
+# ================= GENERATE KEY =================
 if menu == "Generate Key":
     st.header("🔑 Generate RSA Key 2048-bit")
 
@@ -426,253 +341,386 @@ if menu == "Generate Key":
 
     if "priv" in st.session_state:
         st.download_button("Download Private Key", st.session_state["priv"], "private.pem")
+
     if "pub" in st.session_state:
         st.download_button("Download Public Key", st.session_state["pub"], "public.pem")
 
-# ------------------- Enkripsi + Stego -------------------
+
+# ================= ENKRIPSI =================
 elif menu == "Enkripsi + Stego":
+
     st.header("🧩 Enkripsi Seed Phrase → RSA → LSB")
 
     with st.form("encrypt_form"):
-        col1, col2 = st.columns([2, 1])
+        col1, col2 = st.columns([2,1])
+
         with col1:
             msg = st.text_area("Seed phrase / pesan:", height=120)
             pubfile = st.file_uploader("Upload Public Key (PEM)", type=["pem"])
             cover = st.file_uploader("Upload Cover Image (PNG)", type=["png"])
+
         with col2:
-            channel = st.radio("Pilih channel LSB:", ["R", "G", "B"])
-            use_random = st.checkbox("Gunakan Mode Random?")
+            channel = st.radio("Pilih channel LSB:", ["R","G","B"])
+            use_random = st.checkbox("Mode Penempatan Random?")
             seed_input = st.text_input("Seed (opsional, integer)", "")
-            show_all = st.checkbox("Tampilkan semua perubahan pixel?")
+            show_all = st.checkbox("Tampilkan SEMUA perubahan pixel?")
+
         ok = st.form_submit_button("Mulai Enkripsi")
 
     if ok:
         try:
-            if not msg or pubfile is None or cover is None:
-                st.error("Lengkapi pesan, public key, dan gambar cover terlebih dahulu.")
-            else:
-                pub = RSA.import_key(pubfile.read())
-                ciphertext = rsa_encrypt(pub, msg.encode())
+            pub = RSA.import_key(pubfile.read())
+            ciphertext = rsa_encrypt(pub, msg.encode())
 
-                seed_val = int(seed_input) if (use_random and seed_input.strip() != "") else None
+            seed_val = int(seed_input) if (use_random and seed_input.strip() != "") else None
 
-                original_img = Image.open(cover).convert("RGB")
-                stego_buf, stego_img, summary = embed_ciphertext_into_channel(original_img, ciphertext, channel, use_random, seed_val)
-                summary["file_name"] = getattr(cover, "name", "cover")
+            img = Image.open(cover)
+            stego_buf, summary = embed_ciphertext_into_channel(
+                img, ciphertext, channel, use_random, seed_val
+            )
+            summary["file_name"] = cover.name
 
-                st.success("Berhasil disisipkan ke dalam gambar! 🎉")
-                
-                # Display images side by side
-                col_img1, col_img2 = st.columns(2)
-                with col_img1:
-                    st.markdown("**Cover Image (Original)**")
-                    st.image(original_img, width=350)
-                with col_img2:
-                    st.markdown("**Stego Image (Modified)**")
-                    st.image(stego_buf, width=350)
-                
-                st.download_button("Download Stego Image", stego_buf.getvalue(), f"{summary['file_name']}_stego.png", mime="image/png")
+            st.success("Berhasil disisipkan ke dalam gambar! 🎉")
 
-                # Calculate MSE & PSNR metrics
-                metrics = calculate_metrics_per_channel(original_img, stego_img)
+            st.image(stego_buf, width=350)
+            st.download_button("Download Stego Image",
+                               stego_buf.getvalue(),
+                               f"{summary['file_name']}_stego.png")
 
-                # Ringkasan
-                st.subheader("📌 Ringkasan Penyisipan")
-                col_sum1, col_sum2 = st.columns([1, 1])
-                
-                with col_sum1:
-                    st.markdown("**Informasi Penyisipan:**")
-                    st.write(f"• File input: **{summary['file_name']}**")
-                    st.write(f"• Channel: **{summary['channel']}**")
-                    st.write(f"• Mode RANDOM: **{'YA' if summary['use_random'] else 'TIDAK'}**")
-                    if summary["use_random"]:
-                        st.write(f"• Seed (32-bit): **{summary['seed']}**")
-                    st.write(f"• Jumlah bit pesan: **{summary['nbits']}**")
-                    st.write(f"• Ciphertext byte length: **{summary['ciphertext_bytes_len']}**")
-                
-                with col_sum2:
-                    st.markdown("**Metrik Kualitas Gambar:**")
-                    st.write(f"• MSE Overall: **{metrics['Overall']['MSE']:.6f}**")
-                    psnr_overall = "∞ (Identik)" if metrics['Overall']['PSNR'] == float('inf') else f"{metrics['Overall']['PSNR']:.2f} dB"
-                    st.write(f"• PSNR Overall: **{psnr_overall}**")
-                    st.write(f"• MSE Channel R: **{metrics['R']['MSE']:.6f}**")
-                    st.write(f"• MSE Channel G: **{metrics['G']['MSE']:.6f}**")
-                    st.write(f"• MSE Channel B: **{metrics['B']['MSE']:.6f}**")
+            # ---------------- RINGKASAN ----------------
+            st.subheader("📌 Ringkasan Penyisipan")
+            st.write(f"Channel: **{summary['channel']}**")
+            st.write(f"Random Mode: **{summary['use_random']}**")
+            if summary["use_random"]:
+                st.write(f"Seed: **{summary['seed']}**")
+            st.write(f"Panjang ciphertext: **{summary['ciphertext_bytes_len']} bytes**")
 
-                # Ciphertext per-byte (index, ascii_code, char, hex, bin)
-                ct_table = []
-                for i, b in enumerate(ciphertext):
-                    char = chr(b) if 32 <= b <= 126 else "·"
-                    ct_table.append(
-                        {"index": i, "ascii_code": b, "char": char, "hex": f"{b:02x}", "bin": f"{b:08b}"}
-                    )
-                st.markdown("### 🔸 Ciphertext per-byte")
-                scrollable_table(pd.DataFrame(ct_table), height=260)
+            # Ciphertext table
+            ct_table = [{"index": i, "hex": f"{b:02x}", "bin": f"{b:08b}"} 
+                        for i, b in enumerate(ciphertext)]
+            st.markdown("### 🔸 Ciphertext per-byte")
+            scrollable_table(pd.DataFrame(ct_table), height=230)
 
-                # Pixel changes
-                rows = summary["changes"]
-                showN = len(rows) if show_all else min(len(rows), HEADER_BITS)
-                pixel_table = []
-                for i in range(showN):
-                    r = rows[i]
-                    pixel_table.append(
-                        {
-                            "no": i + 1,
-                            "index": r["pos"],
-                            "coord": str(r["coord"]),
-                            "bit": r["inserted_bit"],
-                            "old_pixel": str(r["old_pixel"]),
-                            "new_pixel": str(r["new_pixel"]),
-                            "old_lsb": r["old_lsb"],
-                            "new_lsb": r["new_lsb"],
-                        }
-                    )
-                st.markdown("### 🔸 Perubahan Pixel (LSB)")
-                scrollable_table(pd.DataFrame(pixel_table), height=300)
+            # Pixel changes
+            rows = summary["changes"]
+            showN = len(rows) if show_all else min(len(rows), HEADER_BITS)
+
+            st.markdown("### 🔸 Perubahan Pixel (LSB)")
+            pixel_table = [{
+                "no": i+1,
+                "index": rows[i]["pos"],
+                "coord": rows[i]["coord"],
+                "bit": rows[i]["inserted_bit"],
+                "old": rows[i]["old_pixel"],
+                "new": rows[i]["new_pixel"]
+            } for i in range(showN)]
+
+            scrollable_table(pd.DataFrame(pixel_table), height=260)
 
         except Exception as e:
-            st.error(f"❌ Error saat enkripsi/embed: {e}")
+            st.error(f"❌ Error: {e}")
 
-# ------------------- Ekstrak + Dekripsi -------------------
+
+# ================= DEKRIPSI =================
 elif menu == "Ekstrak + Dekripsi":
-    st.header("🕵️ Ekstrak ciphertext (header-aware) & Dekripsi RSA")
-    decode_mode = st.radio("Pilih mode decode", ["Normal (stego + private key)", "Random (cover + stego + private key)"])
+    st.header("🕵️ Ekstraksi + Dekripsi RSA")
 
-    # NORMAL
-    if decode_mode.startswith("Normal"):
-        col1, col2 = st.columns(2)
-        with col1:
-            uploaded_stego = st.file_uploader("Upload Stego Image (PNG)", type=["png"], key="stego_only")
-        with col2:
-            uploaded_priv = st.file_uploader("Upload Private Key (PEM)", type=["pem"], key="priv_only")
+    mode = st.radio("Pilih Mode", ["Normal", "Random"])
 
-        if st.button("Ekstrak & Dekripsi (Normal)"):
+    if mode == "Normal":
+        stego = st.file_uploader("Upload Stego Image", type=["png"])
+        priv = st.file_uploader("Upload Private Key", type=["pem"])
+
+        if st.button("Ekstrak & Dekripsi"):
             try:
-                if uploaded_stego is None or uploaded_priv is None:
-                    st.error("Upload stego image dan private key terlebih dahulu.")
-                else:
-                    stego_img = Image.open(uploaded_stego)
-                    priv = RSA.import_key(uploaded_priv.read())
+                img = Image.open(stego)
+                priv_key = RSA.import_key(priv.read())
 
-                    found = False
-                    for ch_index, cname in enumerate(["R", "G", "B"]):
-                        header, bits, positions = extract_bits_from_channel(stego_img, ch_index)
-                        if header is None:
-                            continue
-
-                        if header["random"]:
-                            st.error(
-                                f"Header ditemukan pada channel {cname} tetapi header.mode RANDOM=YA. "
-                                "Gunakan mode 'Random' (upload cover image) untuk decode yang benar."
-                            )
-                            found = True
-                            break
-
-                        ciphertext_bytes = _from_bitstring(bits)
-                        try:
-                            decrypted = rsa_decrypt(priv, ciphertext_bytes)
-                            st.success(f"Header ditemukan pada channel {cname} (NON-RANDOM). Pesan berhasil didekripsi.")
-                            st.subheader("Seed Phrase / Pesan (decrypted):")
-                            st.code(decrypted.decode())
-                        except Exception as de:
-                            st.error(f"Error dekripsi RSA: {de}")
-
-                        # ciphertext table with ascii
-                        ct_rows = []
-                        for i, b in enumerate(ciphertext_bytes):
-                            char = chr(b) if 32 <= b <= 126 else "·"
-                            ct_rows.append({"index": i, "ascii_code": b, "char": char, "hex": f"{b:02x}", "bin": f"{b:08b}"})
-                        st.markdown("### 🔸 Ciphertext per-byte")
-                        scrollable_table(pd.DataFrame(ct_rows), height=260)
-
+                found = False
+                for ch_idx, cname in enumerate(["R","G","B"]):
+                    header, bits, pos = extract_bits_from_channel(img, ch_idx)
+                    if not header:
+                        continue
+                    if header["random"]:
+                        st.error(f"Data ada di {cname}, tetapi memakai RANDOM. Gunakan mode RANDOM.")
                         found = True
                         break
 
-                    if not found:
-                        st.error("Header tidak ditemukan di channel manapun. Pastikan image dihasilkan oleh program yang sama (header-aware).")
+                    ciphertext = _from_bitstring(bits)
+                    dec = rsa_decrypt(priv_key, ciphertext)
+
+                    st.success(f"Data ditemukan di channel {cname}")
+                    st.code(dec.decode())
+
+                    ct_table = [{"i": i, "hex": f"{b:02x}", "bin": f"{b:08b}"} 
+                                for i,b in enumerate(ciphertext)]
+                    st.markdown("### Ciphertext")
+                    scrollable_table(pd.DataFrame(ct_table), height=250)
+
+                    found = True
+                    break
+
+                if not found:
+                    st.error("Tidak ada header ditemukan.")
 
             except Exception as e:
-                st.error(f"❌ Error saat ekstraksi/dekripsi: {e}")
+                st.error(f"❌ Error: {e}")
 
-    # RANDOM
+    # RANDOM MODE
     else:
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            uploaded_cover = st.file_uploader("Upload Cover Image (PNG)", type=["png"], key="cover")
-        with col2:
-            uploaded_stego = st.file_uploader("Upload Stego Image (PNG)", type=["png"], key="stego")
-        with col3:
-            uploaded_priv = st.file_uploader("Upload Private Key (PEM)", type=["pem"], key="priv")
+        cover = st.file_uploader("Upload Cover", type=["png"])
+        stego = st.file_uploader("Upload Stego", type=["png"])
+        priv = st.file_uploader("Upload Private Key", type=["pem"])
 
-        if st.button("Ekstrak & Dekripsi (Random)"):
+        if st.button("Ekstrak Random"):
             try:
-                if uploaded_cover is None or uploaded_stego is None or uploaded_priv is None:
-                    st.error("Upload cover, stego, dan private key terlebih dahulu.")
-                else:
-                    cover = Image.open(uploaded_cover)
-                    stego_img = Image.open(uploaded_stego)
-                    if cover.size != stego_img.size:
-                        st.error("Cover dan stego harus memiliki ukuran sama.")
-                    else:
-                        priv = RSA.import_key(uploaded_priv.read())
-                        found = False
+                cimg = Image.open(cover)
+                simg = Image.open(stego)
 
-                        for ch_index, cname in enumerate(["R", "G", "B"]):
-                            header, bits, positions = extract_bits_from_channel(stego_img, ch_index)
-                            if header is None:
-                                continue
+                priv_key = RSA.import_key(priv.read())
 
-                            ciphertext_bytes = _from_bitstring(bits)
-                            try:
-                                decrypted = rsa_decrypt(priv, ciphertext_bytes)
-                                st.success(f"Header ditemukan pada channel {cname}:")
-                                st.write(f"- Mode RANDOM: {'YA' if header['random'] else 'TIDAK'}")
-                                if header["random"]:
-                                    st.write(f"- Seed: {header['seed']}")
-                                st.write(f"- Panjang pesan (bit): {header['msg_len_bits']}")
-                                st.subheader("Seed Phrase / Pesan (decrypted):")
-                                st.code(decrypted.decode())
-                            except Exception as de:
-                                st.error(f"Error dekripsi RSA: {de}")
+                found = False
 
-                            # compute diffs between cover and stego for positions
-                            pixels_cover = list(cover.convert("RGB").getdata())
-                            pixels_stego = list(stego_img.convert("RGB").getdata())
-                            diffs = []
-                            for i, pos in enumerate(positions[:MAX_SHOW_PIXELS]):
-                                cv = pixels_cover[pos][ch_index]
-                                sv = pixels_stego[pos][ch_index]
-                                diffs.append(
-                                    {
-                                        "no": i + 1,
-                                        "idx": pos,
-                                        "coord": coords_from_index(pos, cover.size[0]),
-                                        "cover_val": cv,
-                                        "stego_val": sv,
-                                        "old_lsb": cv & 1,
-                                        "new_lsb": sv & 1,
-                                        "bit_index": i,
-                                        "inserted_bit": sv & 1,
-                                    }
-                                )
+                for ch_idx, cname in enumerate(["R","G","B"]):
+                    header, bits, pos = extract_bits_from_channel(simg, ch_idx)
+                    if not header:
+                        continue
 
-                            st.write(f"Total posisi terpakai: {len(positions)}")
-                            st.write(f"Menampilkan {min(len(diffs), MAX_SHOW_PIXELS)} entri pertama dari perbandingan pixel:")
-                            scrollable_table(pd.DataFrame(diffs), height=300)
+                    ciphertext = _from_bitstring(bits)
+                    dec = rsa_decrypt(priv_key, ciphertext)
 
-                            # ciphertext per-byte with ascii
-                            byte_rows = []
-                            for i, b in enumerate(ciphertext_bytes):
-                                char = chr(b) if 32 <= b <= 126 else "·"
-                                byte_rows.append({"index": i, "ascii_code": b, "char": char, "hex": f"{b:02x}", "bin": f"{b:08b}"})
-                            st.subheader("Per-byte ciphertext (hex + bin + ascii)")
-                            scrollable_table(pd.DataFrame(byte_rows), height=260)
+                    st.success(f"Data ditemukan pada channel {cname}")
+                    st.write(f"Seed: {header['seed']}")
+                    st.code(dec.decode())
 
-                            found = True
-                            break
+                    # show few pixel diffs
+                    px_c = list(cimg.getdata())
+                    px_s = list(simg.getdata())
 
-                        if not found:
-                            st.error("Header tidak ditemukan di channel manapun.")
+                    diffs = []
+                    for i, p in enumerate(pos[:MAX_SHOW_PIXELS]):
+                        diffs.append({
+                            "no": i+1,
+                            "index": p,
+                            "cover": px_c[p],
+                            "stego": px_s[p]
+                        })
+
+                    scrollable_table(pd.DataFrame(diffs), height=260)
+
+                    found = True
+                    break
+
+                if not found:
+                    st.error("Tidak ada data RANDOM ditemukan")
 
             except Exception as e:
-                st.error(f"❌ Error saat ekstraksi/dekripsi random: {e}")
+                st.error(f"❌ Error: {e}")
+
+
+# ================= MSE & PSNR TESTING =================
+elif menu == "Pengujian MSE dan PSNR":
+    st.header("📊 Pengujian MSE dan PSNR")
+    st.markdown("Analisis kualitas gambar stego dengan mengukur Mean Squared Error (MSE) dan Peak Signal-to-Noise Ratio (PSNR)")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        cover_file = st.file_uploader("📁 Upload Gambar Cover", type=["png", "jpg", "jpeg"], key="cover_mse")
+    
+    with col2:
+        stego_file = st.file_uploader("📁 Upload Gambar Stego", type=["png", "jpg", "jpeg"], key="stego_mse")
+    
+    if st.button("🔬 Mulai Analisis", type="primary"):
+        if cover_file is None or stego_file is None:
+            st.warning("⚠️ Harap upload kedua gambar terlebih dahulu!")
+        else:
+            try:
+                with st.spinner("Sedang menganalisis..."):
+                    cover_img = Image.open(cover_file)
+                    stego_img = Image.open(stego_file)
+                    
+                    # Perform analysis
+                    results = analyze_image_quality(cover_img, stego_img)
+                    
+                    st.success("✅ Analisis selesai!")
+                    
+                    # Display images side by side
+                    st.markdown("### 🖼️ Perbandingan Gambar")
+                    img_col1, img_col2 = st.columns(2)
+                    
+                    with img_col1:
+                        st.markdown("**Cover Image**")
+                        st.image(cover_img, use_container_width=True)
+                    
+                    with img_col2:
+                        st.markdown("**Stego Image**")
+                        st.image(stego_img, use_container_width=True)
+                    
+                    # Display basic info
+                    st.markdown("### 📏 Informasi Gambar")
+                    info_col1, info_col2, info_col3 = st.columns(3)
+                    
+                    with info_col1:
+                        st.metric("Lebar", f"{results['dimensions'][0]} px")
+                    
+                    with info_col2:
+                        st.metric("Tinggi", f"{results['dimensions'][1]} px")
+                    
+                    with info_col3:
+                        st.metric("Total Pixel", f"{results['total_pixels']:,}")
+                    
+                    # MSE Results
+                    st.markdown("### 📉 Mean Squared Error (MSE)")
+                    st.markdown("*Semakin kecil nilai MSE, semakin mirip gambar stego dengan cover*")
+                    
+                    mse_data = {
+                        "Channel": ["Overall", "Red (R)", "Green (G)", "Blue (B)"],
+                        "MSE Value": [
+                            f"{results['mse']['overall']:.6f}",
+                            f"{results['mse']['R']:.6f}",
+                            f"{results['mse']['G']:.6f}",
+                            f"{results['mse']['B']:.6f}"
+                        ]
+                    }
+                    
+                    mse_df = pd.DataFrame(mse_data)
+                    st.dataframe(mse_df, use_container_width=True, hide_index=True)
+                    
+                    # PSNR Results
+                    st.markdown("### 📈 Peak Signal-to-Noise Ratio (PSNR)")
+                    st.markdown("*Semakin tinggi nilai PSNR (>30 dB), semakin baik kualitas gambar stego*")
+                    
+                    psnr_data = {
+                        "Channel": ["Overall", "Red (R)", "Green (G)", "Blue (B)"],
+                        "PSNR Value (dB)": [
+                            f"{results['psnr']['overall']:.2f}",
+                            f"{results['psnr']['R']:.2f}",
+                            f"{results['psnr']['G']:.2f}",
+                            f"{results['psnr']['B']:.2f}"
+                        ],
+                        "Kualitas": [
+                            evaluate_psnr_quality(results['psnr']['overall']),
+                            evaluate_psnr_quality(results['psnr']['R']),
+                            evaluate_psnr_quality(results['psnr']['G']),
+                            evaluate_psnr_quality(results['psnr']['B'])
+                        ]
+                    }
+                    
+                    psnr_df = pd.DataFrame(psnr_data)
+                    st.dataframe(psnr_df, use_container_width=True, hide_index=True)
+                    
+                    # Visualization
+                    st.markdown("### 📊 Visualisasi Grafik")
+                    
+                    # Create comparison charts
+                    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+                    
+                    # MSE Chart
+                    channels = ['Overall', 'R', 'G', 'B']
+                    mse_values = [
+                        results['mse']['overall'],
+                        results['mse']['R'],
+                        results['mse']['G'],
+                        results['mse']['B']
+                    ]
+                    
+                    colors_mse = ['#FF6B6B', '#E74C3C', '#C0392B', '#A93226']
+                    bars1 = ax1.bar(channels, mse_values, color=colors_mse, alpha=0.8, edgecolor='black', linewidth=1.5)
+                    ax1.set_title('Mean Squared Error (MSE)', fontsize=14, fontweight='bold', pad=15)
+                    ax1.set_ylabel('MSE Value', fontsize=11)
+                    ax1.set_xlabel('Channel', fontsize=11)
+                    ax1.grid(axis='y', alpha=0.3, linestyle='--')
+                    ax1.set_facecolor('#f8f9fa')
+                    
+                    # Add value labels on bars
+                    for bar in bars1:
+                        height = bar.get_height()
+                        ax1.text(bar.get_x() + bar.get_width()/2., height,
+                                f'{height:.4f}',
+                                ha='center', va='bottom', fontsize=9, fontweight='bold')
+                    
+                    # PSNR Chart
+                    psnr_values = [
+                        results['psnr']['overall'],
+                        results['psnr']['R'],
+                        results['psnr']['G'],
+                        results['psnr']['B']
+                    ]
+                    
+                    colors_psnr = ['#4ECDC4', '#45B7D1', '#3498DB', '#2980B9']
+                    bars2 = ax2.bar(channels, psnr_values, color=colors_psnr, alpha=0.8, edgecolor='black', linewidth=1.5)
+                    ax2.set_title('Peak Signal-to-Noise Ratio (PSNR)', fontsize=14, fontweight='bold', pad=15)
+                    ax2.set_ylabel('PSNR (dB)', fontsize=11)
+                    ax2.set_xlabel('Channel', fontsize=11)
+                    ax2.grid(axis='y', alpha=0.3, linestyle='--')
+                    ax2.axhline(y=30, color='red', linestyle='--', linewidth=2, alpha=0.7, label='Threshold (30 dB)')
+                    ax2.legend(loc='lower right')
+                    ax2.set_facecolor('#f8f9fa')
+                    
+                    # Add value labels on bars
+                    for bar in bars2:
+                        height = bar.get_height()
+                        ax2.text(bar.get_x() + bar.get_width()/2., height,
+                                f'{height:.2f}',
+                                ha='center', va='bottom', fontsize=9, fontweight='bold')
+                    
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    
+                    # Quality Assessment
+                    st.markdown("### 🎯 Kesimpulan Kualitas")
+                    
+                    overall_psnr = results['psnr']['overall']
+                    overall_mse = results['mse']['overall']
+                    
+                    if overall_psnr >= 40:
+                        quality_status = "🟢 **Excellent** - Kualitas sangat baik, perubahan hampir tidak terlihat"
+                        quality_color = "green"
+                    elif overall_psnr >= 30:
+                        quality_status = "🟡 **Good** - Kualitas baik, perubahan minimal"
+                        quality_color = "blue"
+                    elif overall_psnr >= 20:
+                        quality_status = "🟠 **Fair** - Kualitas cukup, perubahan mulai terlihat"
+                        quality_color = "orange"
+                    else:
+                        quality_status = "🔴 **Poor** - Kualitas rendah, perubahan terlihat jelas"
+                        quality_color = "red"
+                    
+                    st.markdown(f"**Status Kualitas:** {quality_status}")
+                    st.markdown(f"- **Overall PSNR:** {overall_psnr:.2f} dB")
+                    st.markdown(f"- **Overall MSE:** {overall_mse:.6f}")
+                    
+                    # Additional insights
+                    with st.expander("ℹ️ Informasi Tambahan tentang MSE dan PSNR"):
+                        st.markdown("""
+                        **Mean Squared Error (MSE):**
+                        - Mengukur rata-rata kuadrat perbedaan antara nilai pixel gambar cover dan stego
+                        - Nilai MSE = 0 berarti kedua gambar identik
+                        - Semakin kecil nilai MSE, semakin baik kualitas steganografi
+                        
+                        **Peak Signal-to-Noise Ratio (PSNR):**
+                        - Mengukur rasio antara nilai maksimum sinyal dengan noise
+                        - Satuan: desibel (dB)
+                        - Interpretasi nilai PSNR:
+                          - **> 40 dB:** Excellent - Perubahan hampir tidak terdeteksi
+                          - **30-40 dB:** Good - Kualitas baik untuk steganografi
+                          - **20-30 dB:** Fair - Perubahan mulai terlihat
+                          - **< 20 dB:** Poor - Perubahan jelas terlihat
+                        
+                        **Formula:**
+                        - MSE = (1/n) × Σ(Cover - Stego)²
+                        - PSNR = 10 × log₁₀(255² / MSE)
+                        """)
+                    
+            except Exception as e:
+                st.error(f"❌ Error saat analisis: {e}")
+
+
+def evaluate_psnr_quality(psnr_value):
+    """Evaluate PSNR quality"""
+    if psnr_value >= 40:
+        return "🟢 Excellent"
+    elif psnr_value >= 30:
+        return "🟡 Good"
+    elif psnr
