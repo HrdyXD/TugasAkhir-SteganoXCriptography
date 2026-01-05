@@ -1,4 +1,6 @@
 streamlit
 pycryptodomex
-pillow
+Pillow
 pandas
+numpy
+matplotlib
